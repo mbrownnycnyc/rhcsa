@@ -375,7 +375,7 @@ Change: 2024-01-11 10:39:28.404596100 +0000
 ```
 
 4. interpolation of command output
-* the output of a command can be interpolated into another command in two ways:
+* the output of an command invocation can be interpolated into another command invocation via two methods in bash:
   * `$(command)`
   * `` `command` `` (backticks)
 ```
