@@ -1,10 +1,10 @@
 ## order of courses on pluralsight
 
 * RHEL 8: Using Essential Tools
+* RHEL 8: Creating Shell Scripts
 * RHEL 8: Configuring Local Storage
 * RHEL 8: Creating and Configuring File Systems
 * RHEL 8: Operating Running Systems
-* RHEL 8: Creating Shell Scripts
 * RHEL 8: Deploying, Configuring and Maintaining Systems
 * RHEL 8: Managing Users and Groups
 * RHEL 8: Managing Networking
@@ -463,5 +463,283 @@ ls -l file_perms
 chmod -v 666 file_perms # actively sets all bits in permissions control entry
 chmod -v +w file_perms # actively sets the owner bit to write only if it is allowed by the current `umask` in the permissions control entry
 chmod -v o+w file_perms # actively sets the owner bit to write in the permissions control entry
+```
+
+## changing file ownership
+* chmod, chown, chgrp
+
+* review info about your user
+```
+[vagrant@rhel8 ~]$ id
+uid=1000(vagrant) gid=1000(vagrant) groups=1000(vagrant) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+```
+* change owner
+```
+sudo chown root f1
+```
+* change owner and group
+```
+sudo chown root:root f1
+```
+* change group
+```
+sudo chgrp root f1
+```
+
+## managing links in linux
+
+### hardlinks
+* can be created for files, not directories
+```
+cd
+mkdir new_dir
+ls -ld new_dir #see hardlink count of two
+ls -ldi new_dir #also lists inodes, which are the same for the entries: `.` and `new_dir`
+
+mkdir new_dir/dir1
+ls -ldi new_dir #now there are three hardlinks,  `.`, `new_dir`, and `..`
+```
+
+### softlinks
+```
+ln -s /etc/services #creates `services` softlink file within current directories
+ls -l services
+```
+
+## switching user and groups IDs
+* wheel groups: https://www.youtube.com/watch?v=5vmp6Pg8rWc
+  * https://catb.org/jargon/html/W/wheel
+
+* you can apply a group membership, but it isn't effective on the user until they start a new sessions
+```
+[vagrant@rhel8 ~]$ id
+uid=1000(vagrant) gid=1000(vagrant) groups=1000(vagrant) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+[vagrant@rhel8 ~]$ sudo usermod -aG wheel vagrant
+[vagrant@rhel8 ~]$ id vagrant #current candidate config
+uid=1000(vagrant) gid=1000(vagrant) groups=1000(vagrant),10(wheel)
+[vagrant@rhel8 ~]$ id #current running config
+uid=1000(vagrant) gid=1000(vagrant) groups=1000(vagrant) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+```
+
+* switching groups
+  * this controls the group ownership of new files.
+  * you can spawn a new shell with a different groupid
+```
+[vagrant@rhel8 ~]$ id
+uid=1000(vagrant) gid=1000(vagrant) groups=1000(vagrant) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+[vagrant@rhel8 ~]$ id vagrant
+uid=1000(vagrant) gid=1000(vagrant) groups=1000(vagrant),10(wheel)
+[vagrant@rhel8 ~]$ touch gid_file; ls -l gid_file
+-rw-rw-r--. 1 vagrant vagrant 0 Jan 12 10:52 gid_file
+[vagrant@rhel8 ~]$ newgrp wheel
+[vagrant@rhel8 ~]$ id
+uid=1000(vagrant) gid=10(wheel) groups=10(wheel),1000(vagrant) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+[vagrant@rhel8 ~]$ touch wheel_gid_file; ls -l wheel_gid_file
+-rw-r--r--. 1 vagrant wheel 0 Jan 12 10:53 wheel_gid_file
+[vagrant@rhel8 ~]$ exit
+exit
+[vagrant@rhel8 ~]$ id
+uid=1000(vagrant) gid=1000(vagrant) groups=1000(vagrant) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+[vagrant@rhel8 ~]$ ls -l wheel_gid_file
+-rw-r--r--. 1 vagrant wheel 0 Jan 12 10:53 wheel_gid_file
+[vagrant@rhel8 ~]$ touch post_wheel_gid_file; ls -l post_wheel_gid_file
+-rw-rw-r--. 1 vagrant vagrant 0 Jan 12 10:53 post_wheel_gid_file
+```
+
+* switch user id
+```
+sudo passwd root
+su - #switches to root account, and sets environment
+```
+
+# archiving files in linux
+
+## understanding special case permissions
+
+### write only files
+* although not strictly archiving files, allow users to submit data to a log file without being able to read the file content.
+  
+### securing directories
+* read allows file name listing (this is what you want to do if you want to restrict)
+* execute allows access to directory
+  * by assigning execute only, it allows users only access to the files that they know exist.
+* write allows users to create files and access them by name.
+
+### archiving files using `tar` and `star`
+
+### file compression using `gzip` and `bzip2`
+
+## working with special case permissions
+
+### working with files
+```
+touch log
+ls -l log
+cat log # can read
+chmod -v u=w log #set explicit permissions
+cat log #nope
+echo hello >> log #yep
+cat log #nope
+sudo cat log #yep
+hello
+```
+
+### working with dirs
+```
+mkdir -m 155 foo #POSIX, set the `mode` of the directory
+[vagrant@rhel8 ~]$ ls -al | grep foo
+d--xr-xr-x. 2 vagrant vagrant    6 Jan 12 11:10 foo
+cd foo # can "execute" (enter) the directory
+[vagrant@rhel8 foo]$ ls -al . #nope
+ls: cannot open directory '.': Permission denied
+
+[vagrant@rhel8 ~]$ chmod -v u=wx foo #set write and exec permissions
+mode of 'foo' changed from 0155 (--xr-xr-x) to 0355 (-wxr-xr-x)
+[vagrant@rhel8 ~]$ echo test >> foo/file #yep
+[vagrant@rhel8 ~]$ cat foo/file
+test
+```
+
+## using the `tar` archiver
+
+* create a tar
+```
+[vagrant@rhel8 ~]$ sudo du -sh /etc
+26M     /etc
+[vagrant@rhel8 ~]$ sudo tar -cf etc.tar /etc
+tar: Removing leading `/' from member names
+[vagrant@rhel8 ~]$ ls -lh etc.tar
+-rw-r--r--. 1 root root 25M Jan 12 11:16 etc.tar
+```
+
+* review contents of tar
+```
+tar -tf etc.tar
+```
+
+* extract tar file
+```
+#extract to current dir
+tar -xf etc.tar
+[vagrant@rhel8 ~]$ ll ./etc | wc -l
+186
+
+#extract to target dir
+sudo tar -xf /home/vagrant/etc.tar etc/hosts
+```
+
+## using the `star` archiver
+* more options than `tar`
+
+1. install star package
+```
+sudo yum install -y star
+man star
+star --help
+```
+
+2. backup files from locally expanded etc directory (note that you don't have permissions to everything)
+```
+star -c -f myetc.tar ./etc
+```
+
+3. list
+```
+star -t -f myetc.tar
+```
+
+4. extract
+```
+star -x -f myetc.tar # has overwrite protection, which `tar` does not
+```
+
+## compressing files
+* tar can call gzip or bzip2
+```
+tar -czf #gzip, faster but less compressed
+tar -cjf #bzip2, slower but more compressed
+```
+
+1. clear homedir
+```
+cd ~
+sudo rm -rf *
+```
+
+2. tar etc uncompressed
+```
+sudo tar -cf etc.tar /etc
+[vagrant@rhel8 ~]$ ls -lh etc.tar
+-rw-r--r--. 1 root root 25M Jan 12 11:26 etc.tar
+```
+
+3. compress the archive with `tar`, timing the zip action, verify size, then decompress
+```
+[vagrant@rhel8 ~]$ time gzip etc.tar
+
+real    0m0.891s
+user    0m0.874s
+sys     0m0.009s
+[vagrant@rhel8 ~]$ ls -lh
+total 7.0M
+-rw-r--r--. 1 vagrant vagrant 7.0M Jan 12 11:26 etc.tar.gz
+[vagrant@rhel8 ~]$ gunzip etc.tar.gz
+[vagrant@rhel8 ~]$ ls -lh
+total 25M
+-rw-r--r--. 1 vagrant vagrant 25M Jan 12 11:26 etc.tar
+```
+
+4. compress the archive with `bzip2`
+```
+[vagrant@rhel8 ~]$ time bzip2 etc.tar
+
+real    0m1.855s
+user    0m1.812s
+sys     0m0.021s
+[vagrant@rhel8 ~]$ ls -lh
+total 5.5M
+-rw-r--r--. 1 vagrant vagrant 5.5M Jan 12 11:26 etc.tar.bz2
+[vagrant@rhel8 ~]$ bunzip2 etc.tar.bz2
+rm -rf etc.tar
+```
+
+5. use tar with gzip option
+```
+sudo tar -vzf etc.tar.gz /etc 
+```
+
+# RHEL 8: Creating Shell Scripts
+
+# automating tasks using bash scripts
+
+## what are shell scripts? / using script syntax at the CLI
+* shell scripts are the same as batch scripts... straight execution
+* you heavily leverage exit codes of previous step (`0` == success, `N` == some other error)
+* exit code is accessible via the bash var `$`
+
+### `for` loop
+```
+[vagrant@rhel8 ~]$ for item in hi salut ciao ; do echo $item ; done
+hi
+salut
+ciao
+```
+
+### `for` loop to create a some users and setting their password
+```
+for item in bob sally sue
+do
+sudo useradd -m $item
+echo Password1 | sudo passwd --stdin $item
+tail -n1 /etc/passwd
+done
+```
+
+### `while` loop
+```
+[vagrant@rhel8 ~]$ i=3; while [ $i -gt 0 ]; do echo $i; let i-=1 ; done
+3
+2
+1
 ```
 
