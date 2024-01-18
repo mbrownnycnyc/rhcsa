@@ -743,3 +743,142 @@ done
 1
 ```
 
+## understanding script logic
+
+* `$?` returns the exit code, other than 0 indicates a failure.
+* you can chain using:
+  * `&&` if first command succeeds, then execute second
+  * `||` if first command fails, then execute second
+
+## using simple logic at the CLI (lab)
+* check output
+```
+[vagrant@rhel8 ~]$ echo $?
+0
+[vagrant@rhel8 ~]$ tail -n3 /etc/fail
+tail: cannot open '/etc/fail' for reading: No such file or directory
+[vagrant@rhel8 ~]$ echo $?
+1
+```
+* dynamically use the logic results
+```
+[vagrant@rhel8 ~]$ mkdir etc || cd etc #if failed
+mkdir: cannot create directory ‘etc’: File exists
+[vagrant@rhel8 etc]$ pwd
+/home/vagrant/etc
+[vagrant@rhel8 etc]$ mkdir sales && cd sales #if succeeded
+[vagrant@rhel8 sales]$ pwd
+/home/vagrant/etc/sales
+```
+* grouping logic with `{}`
+```
+cd etc || { mkdir etc && cd etc; }
+#if cd fails, then... mkdir, if mkdir succeeds, then cd
+```
+
+# creating your own shell scripts
+
+## implementing the shebang
+
+* note that you do NOT need to know vim at the level in which Andrew teaches it.
+
+* what is shebang, designates a bash script
+```
+[vagrant@rhel8 ~]$ echo "foo" > foo.sh
+[vagrant@rhel8 ~]$ file foo.sh
+foo.sh: ASCII text
+[vagrant@rhel8 ~]$ echo "#! /bin/bash" > test.sh
+[vagrant@rhel8 ~]$ cat test.sh
+#! /bin/bash
+[vagrant@rhel8 ~]$ file test.sh
+test.sh: Bourne-Again shell script, ASCII text executable
+```
+* make a file executable
+```
+chmod +x my.sh
+```
+
+## working with vim abbreviations
+* you should train on vim separately.
+
+## working with PATH and execute permissions
+
+* can run scripts with `bash script.sh`
+* you can `chmod +x script.sh` then invoke with `script.sh`
+* the PATH variable exists, and by default `~/bin` is in PATH var
+* review the `which` command
+
+## special variable / using special variables in scripts
+* `$$`: current PID
+* `$?`: exit status
+* `!$`: last argument in bash history
+* `$0`: is the root name of the program name (also note the use of `basename` command)
+* `$[N]`: arguments
+* `$*`: all arguments as a string
+* `$@`: all arguments as an array
+* `$#`: arg count
+
+### setting a default value for an arg
+```
+PID=${*:-"1"} #since there are {}, this will only be called if there's no value for var
+```
+
+# automating the user creation process
+
+## testing user input
+* check arg count
+```
+#!/bin/bash
+if [ "$#" -lt 1 ] ; then
+  echo "no args bro"
+  echo "usage: $0 <username>"
+  exit 1 #error code 1
+fi
+```
+
+## ensure user is not already present
+* use `getent` to check `passwd`
+```
+#!/bin/bash
+if [ "$#" -lt 1 ] ; then
+  echo "no args bro"
+  echo "usage: $0 <username>"
+  exit 1 #error code 1
+elif getent passwd "$1"; then
+  echo "the user $1 already is on the system"
+  exit 2
+fi
+```
+
+## using read during script execution
+* use `read` to take in user input and set a var (`USER_PASSWORD`)
+```
+#!/bin/bash
+if [ "$#" -lt 1 ] ; then
+  echo "no args bro"
+  echo "usage: $0 <username>"
+  exit 1 #error code 1
+elif getent passwd "$1"; then
+  echo "the user $1 already is on the system"
+  exit 2
+fi
+
+#get the password
+read -s -p "enter password for user $1: " USER_PASSWORD # -s is silent, -p is a prompt
+
+if [ (echo "$USER_PASSWORD" | wc -c ) -lt 1 ] ; then
+  echo "no args bro"
+  exit 3
+fi
+
+#create the user
+sudo useradd -m "$1"
+
+#set the password
+echo "$1:$USER_PASSWORD" | sudo chpasswd
+
+#validate
+getent passwd "$1"
+```
+
+## using functions and loops in scripts
